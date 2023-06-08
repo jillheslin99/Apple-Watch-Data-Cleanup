@@ -1,29 +1,237 @@
 ---
 title: "Apple Watch Data Conversion"
-output: html_document
-date: "2023-06-08"
+output: 
+  html_document:
+    theme: yeti
+    highlight: kate
+    code_folding: hide
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+```{r, warning=FALSE, message=FALSE}
+#load libaries
+library(pander)
+library(magrittr)
+library(dplyr)
+library(xml2)
+library(tidyverse)
+library(readr)
+library(XML)
+library(car)
+library(DT)
+library(shiny)
+library(lubridate)
 ```
 
-## R Markdown
+# Data Size and Import
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+There is a lot of data in this file, so we first want to see how many records there are in this set. 
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+```{r}
+#import apple watch data file
+##This should be an xml file, if the xml file won't run properly then ensure that your iphone is up to date and redownload the health data.
+records <- read_xml("exportholly.xml") %>%
+  xml_children
 
-```{r cars}
-summary(cars)
+#View record length
+pander(length(records))
 ```
 
-## Including Plots
+From this we want to see how many records we have of each type of data collected off of the apple watch. Since some of the types of records have such a low amount, they may not be helpful.
 
-You can also embed plots, for example:
+```{r}
+#Export record types
+record_types <- xml_attr(records, "type")
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+#view table of record types that are pulled from the xml file
+record_types %>%
+  table(dnn="Record_type") %>%            
+  as.data.frame %>%
+  arrange(desc(Freq)) %>%
+  mutate(Count = prettyNum(Freq, big.mark=",")) %>%
+  select(-Freq) %>%
+  pander()
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+# Pulling out Data Types
+
+For the xml file, I have to pull out all of the records separately and join them together later. You will have to pick from the above types and follow the code below to pull out that data. You may need to change some of the code if you are not pulling out the same records.
+
+
+```{r, warning=FALSE, message=FALSE}
+
+#######
+
+#Extract Heart Rate Records
+heart_rate_records <- records[which(record_types == "HKQuantityTypeIdentifierHeartRate")]
+
+#Heart Rate Dataframe
+heart_rate_df <- data_frame(date = strptime(xml_attr(heart_rate_records, "endDate"), '%Y-%m-%d %H:%M:%S %z'),
+                            heart_rate = as.integer(xml_attr(heart_rate_records, "value")))
+
+#Fix the date so that the format can join our records later
+heart_rate_df$date <- ymd_hms(heart_rate_df$date)
+
+#all of the data is at a minute in time, we would have a lot of NAs if we kept to minutes so this changes it to take the average for the hour, this could also be changed to day if that would be better for your data.
+Heart_Rate <- heart_rate_df %>%
+  group_by(date=floor_date(date,'hour')) %>%
+  summarize(Mean_Heart_Rate=mean(heart_rate))
+
+
+#######
+
+#Extract active energy Records
+active_energy_records <- records[which(record_types == "HKQuantityTypeIdentifierActiveEnergyBurned")]
+
+#Active Energy Data frame
+active_energy_df <- data_frame(date = strptime(xml_attr(active_energy_records, "endDate"), '%Y-%m-%d %H:%M:%S %z'),
+                            active_energy = as.integer(xml_attr(active_energy_records, "value")))
+
+active_energy_df$date <- ymd_hms(active_energy_df$date)
+
+Active_Energy <- active_energy_df %>%
+  group_by(date=floor_date(date,'hour')) %>%
+  summarize(Mean_Active_Energy=mean(active_energy))
+
+
+#######
+
+#Extract basal energy Records
+basal_energy_records <- records[which(record_types == "HKQuantityTypeIdentifierBasalEnergyBurned")]
+
+#Basal Energy Data frame
+basal_energy_df <- data_frame(date = strptime(xml_attr(basal_energy_records, "endDate"), '%Y-%m-%d %H:%M:%S %z'),
+                            basal_energy = as.integer(xml_attr(basal_energy_records, "value")))
+
+basal_energy_df$date <- ymd_hms(basal_energy_df$date)
+
+Basal_Energy <- basal_energy_df %>%
+  group_by(date=floor_date(date,'hour')) %>%
+  summarize(Mean_Basal_Energy=mean(basal_energy))
+
+
+#######
+
+#Extract Distance Records
+distance_records <- records[which(record_types == "HKQuantityTypeIdentifierDistanceWalkingRunning")]
+
+
+#Distance Data frame
+distance_df <- data_frame(date = strptime(xml_attr(distance_records, "endDate"), '%Y-%m-%d %H:%M:%S %z'),
+                            distance = as.integer(xml_attr(distance_records, "value")))
+
+distance_df$date <- ymd_hms(distance_df$date)
+
+Distance <- distance_df %>%
+  group_by(date=floor_date(date,'hour')) %>%
+  summarize(Distance=sum(distance))
+
+
+#######
+
+#Extract steps records
+steps_records <- records[which(record_types == "HKQuantityTypeIdentifierStepCount")]
+
+#Steps Data frame
+steps_df <- data_frame(date = strptime(xml_attr(steps_records, "endDate"), '%Y-%m-%d %H:%M:%S %z'),
+                            steps = as.integer(xml_attr(steps_records, "value")))
+
+steps_df$date <- ymd_hms(steps_df$date)
+
+Steps <- steps_df %>%
+  group_by(date=floor_date(date,'hour')) %>%
+  summarize(Steps=sum(steps))
+
+
+#######
+
+#Extract Stand Time Records
+stand_time_records <- records[which(record_types == "HKQuantityTypeIdentifierAppleStandTime")]
+
+#Stand Time Data frame
+stand_time_df <- data_frame(date = strptime(xml_attr(stand_time_records, "endDate"), '%Y-%m-%d %H:%M:%S %z'),
+                            stand_time = as.integer(xml_attr(stand_time_records, "value")))
+
+stand_time_df$date <- ymd_hms(stand_time_df$date)
+
+Stand_Time <- stand_time_df %>%
+  group_by(date=floor_date(date,'hour')) %>%
+  summarize(Stand_Time=sum(stand_time))
+
+
+#######
+
+#Extract walking speed Records
+walking_speed_records <- records[which(record_types == "HKQuantityTypeIdentifierWalkingSpeed")]
+
+#Walking Speed Data frame
+walking_speed_df <- data_frame(date = strptime(xml_attr(walking_speed_records, "endDate"), '%Y-%m-%d %H:%M:%S %z'),
+                            walking_speed = as.integer(xml_attr(walking_speed_records, "value")))
+
+walking_speed_df$date <- ymd_hms(walking_speed_df$date)
+
+Walking_Speed <- walking_speed_df %>%
+  group_by(date=floor_date(date,'hour')) %>%
+  summarize(Mean_Walking_Speed=mean(walking_speed))
+
+
+#######
+
+#Extract Exercise Time Records
+exercise_time_records <- records[which(record_types == "HKQuantityTypeIdentifierAppleExerciseTime")]
+
+#Exercise Time Data frame
+exercise_time_df <- data_frame(date = strptime(xml_attr(exercise_time_records, "endDate"), '%Y-%m-%d %H:%M:%S %z'),
+                            exercise_time = as.integer(xml_attr(exercise_time_records, "value")))
+
+exercise_time_df$date <- ymd_hms(exercise_time_df$date)
+
+Exercise_Time <- exercise_time_df %>%
+  group_by(date=floor_date(date,'hour')) %>%
+  summarize(Exercise_Time=sum(exercise_time))
+
+#######
+
+#Extract Stair Flights Records
+stairs_records <- records[which(record_types == "HKQuantityTypeIdentifierFlightsClimbed")]
+
+#Stair Data frame
+stairs_df <- data_frame(date = strptime(xml_attr(stairs_records, "endDate"), '%Y-%m-%d %H:%M:%S %z'),
+                            stairs = as.integer(xml_attr(stairs_records, "value")))
+
+stairs_df$date <- ymd_hms(stairs_df$date)
+
+Stairs <- stairs_df %>%
+  group_by(date=floor_date(date,'hour')) %>%
+  summarize(Stairs=mean(stairs))
+
+
+```
+
+
+## Combine all Data Sets
+
+This next part combines all of the data sets and saves it to a csv file that can be used for 
+
+```{r, warning=FALSE, message=FALSE}
+#Join all data
+AppleWatch <- left_join(Heart_Rate, Active_Energy, by='date')
+AppleWatch <- left_join(AppleWatch, Basal_Energy, by='date')
+AppleWatch <- left_join(AppleWatch, Distance, by='date')
+AppleWatch <- left_join(AppleWatch, Steps, by='date')
+AppleWatch <- left_join(AppleWatch, Stand_Time, by='date')
+AppleWatch <- left_join(AppleWatch, Stairs, by='date')
+AppleWatch <- left_join(AppleWatch, Exercise_Time, by='date')
+AppleWatch <- left_join(AppleWatch, Walking_Speed, by='date')
+
+#This rounds the decimal places since there are a lot of digits
+AppleWatch <- AppleWatch %>%
+  mutate_if(is.numeric, round, digits=2)
+
+#view complete dataset
+datatable(AppleWatch)
+
+#save as csv file
+##You can access the file through whatever path you input down below
+write.csv(AppleWatch, '/Users/jillh/Documents/Senior_Project/AppleWatch.csv', row.names=FALSE)
+
+```

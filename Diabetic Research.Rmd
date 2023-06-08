@@ -1,0 +1,68 @@
+---
+title: "Diabetic Research"
+output: 
+  html_document:
+    theme: cosmo
+    highlight: kate
+    code_folding: hide
+---
+
+## Background
+
+Type 2 diabetes has run in my moms family for a few generations. Also, my sister was diagnosed with type 1 diabetes in 2017 when she was already 19 years old. This encouraged me to look further into how this disease could be developed so late in life as well as how this disease impacts her. I was also encouraged to look further into type 2 and preventative measures as it may influence me in the future.
+
+Starting with my sister, the pump that she uses is an automated tandem pump that will automatically give her insulin as needed. She also has a Dexcom G6 which does continuous glucose monitoring to automatically track blood glucose levels throughout the day and the night. I took this data as well as her apple watch data to analyse.
+
+My goal with this research is to help my sister see what influences her glucose levels the most and if there is a way for her to estimate when she is going to have a harder day than normal. I plan to build a dashboard that she can continue to use to look into her data and see how things change overtime.
+
+With this I also want to understand more about diabetes and the differences between type 1 and type 2. My goal with this portion of the project is to understand how to reduce type 2 diabetes and analyse my own health data to see where I need to improve personally.
+
+## Overview
+
+Diabetes is a condition where your body doesn't make enough insulin or can't use it as it should. This causes too much blood sugar to stay in the bloodstream leading to health problems. This can include heart disease, vision loss or kidney disease. 
+
+## Type 1 vs Type 2
+
+This image shows us the difference between type 1 and type 2 diabetes. We will look further into the details of each type but the main difference is that in type 1, the body doesn't produce insulin while in type 2 the body has become resistant to insulin. Both of these types cause there to be glucose buildup in the blood stream.
+
+![ ](type1vstype2.jpg)
+
+Something else to note about the difference between type 1 and type 2 diabetes is that type 1 diabetes will be developed in those who have high gene susceptibility. Meanwhile, type 2 is equally developed in those who have low genetic susceptibility and high genetic susceptibility, it is also easier to treat. We will talk about this more below. 
+
+![ ](genetics.jpg)
+
+### Type 1
+
+Type 1 diabetes is a chronic condition in which the pancreas produces little or no insulin. Symptoms may include increased thirst, frequent urination, hunger, fatigue and blurred vision. I noticed that my sister expressed many of these symptoms before she was diagnosed. 
+
+What occurs is that the pancreas does not make insulin, simply because the body's immune system attacks the islet cells in the pancreas that make insulin. An islet cell produces hormones that are secreted into the bloodstream and control the level of glucose in the blood. 
+
+![ ](descriptive-illustration-pancreas-pancreatic-islets-260nw-454470670.webp)
+
+This image shows that the islet cells in those who have type 1 diabetes have destroyed beta cells. This causes the pancreas to not be able to produce insulin. 
+
+#### Genetic Mutations
+
+Type 1 diabetes is known a 'complex trait' meaning that it is likely that mutations in several genes likely contribute to the disease. There are said to be at least 20 insulin-dependent genes associated with the development of diabetes. Type 1 occurs more in families which there are others how have the disease and other autoimmune conditions.
+
+#### Late Development
+
+Type 1 diabetes typically appears in adolescence. The reason for this is because type 1 is linked genetically so typically if they are born with gene mutations that would cause them to get type 1 diabetes, it would show fairly early. However, scientists believe that environmental factors can trigger the disease. For example, there are cases of people in their twenties who develop type 1 diabetes after having covid. There are many people who may have the genes for diabetes but won't go on to have type 1 unless an environmental factors influences it. 
+
+![ ](t1_disease_progression.jpg)
+
+The above image shows the progression of type 1 diabetes and the various stages. This helps us to see how type 1 may not instantly been diagnosed in adolescence. The following chart shows us specifically what each of the three stages of diabetes includes and looks like. 
+
+![ ](t1stages.webp)
+
+### Type 2
+
+
+## Preventing Diabeties
+
+Treatment and prevention of diabetes is different for each type. For type 1, treatment aims at maintaining normal blood sugar levels through regular monitoring, insulin therapy, diet and exercise. The receptors are sill present and will bind to insulin when it is present which will allow the glucose out of the bloodstream. Diet and exercise can help as it would naturally reduce the amount of glucose in the bloodstream. One thing that I notice my sister do often is measuring out the carbs and sugar intake so that she knows the amount of insulin that she would need.
+
+Type 2 diabetes is different, there is already insulin present in the body. However, the receptors don't recognize the insulin so the glucose stays in the blood stream. Insulin treatment wouldn't help with this type of diabetes because the receptors will still not recognize its present to let the glucose out of the bloodstream. The treatment used is to monitor blood sugar and to focus on healthy eating and exercising. This will naturally reduce the glucose in the bloodstream and put blood sugar levels into the normal range. Many people are able to reduce the symptoms and the impacts of type 2 diabetes through attention to their health.
+
+## Dangers of Diabetes
+

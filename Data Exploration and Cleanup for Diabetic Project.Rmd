@@ -1,0 +1,523 @@
+---
+title: "Data Exploration and Cleanup"
+output: 
+  html_document:
+    theme: yeti
+    highlight: kate
+    code_folding: hide
+---
+
+```{r, warning=FALSE, message=FALSE}
+#load libaries
+library(pander)
+library(magrittr)
+library(dplyr)
+library(xml2)
+library(tidyverse)
+library(readr)
+library(XML)
+library(car)
+library(DT)
+library(shiny)
+library(lubridate)
+```
+
+## Dexcom Data
+
+The Dexcom G6 Continuous Glucose Monitoring (CGM) System sends Glucose numbers to a smart phone every 5 minutes. 
+
+This data was collected for May 1st, 2022 - April 30th, 2023. The following code sorts this data and cleans it up, the following data table are the resulting glucose numbers.
+
+```{r, warning=FALSE, message=FALSE}
+#Dexcom Data Loading
+Dexcom1 <- read_csv("Dexcom1.csv")
+Dexcom2 <- read_csv("Dexcom2.csv")
+Dexcom3 <- read_csv("Dexcom3.csv")
+Dexcom4 <- read_csv("Dexcom4.csv")
+Dexcom5 <- read_csv("Dexcom5.csv")
+
+#Join Dexcom Data Files
+Dexcom <- rbind(Dexcom1, Dexcom2, Dexcom3, Dexcom4, Dexcom5)
+
+#Mutating Column Names
+Dex_Clean <- Dexcom %>%
+  mutate(Date =`Timestamp (YYYY-MM-DDThh:mm:ss)`,
+         Event=`Event Type`,
+         Sub_Event = `Event Subtype`,
+         Glucose = `Glucose Value (mg/dL)`)
+
+#Replace 'High' in glucose column with value of 400 (Information came from a key where data was collected)
+Dex_Clean$Glucose <- replace(Dex_Clean$Glucose, Dex_Clean$Glucose=="High", 400)
+
+#Take only the needed columns
+Dex_Clean <- select(Dex_Clean, c(Date, Glucose))
+
+#Reformat the date column so it can be joined later
+Dex_Clean$Date <- ymd_hms(Dex_Clean$Date)
+Dex_Clean$Glucose <- as.numeric(Dex_Clean$Glucose)
+
+#Take mean glucose level for each hour so it will match other data set formats
+Dex_Final <- Dex_Clean %>%
+  group_by(date=floor_date(Date,'hour')) %>%
+  summarize(Mean_Glucose=mean(Glucose))
+
+#View Dex data
+datatable(Dex_Clean)
+```
+
+## Weather Data
+
+I imported weather data to also see how blood sugar levels compare to the weather and to test if that would have any impact, the following table shows the weather data that was collected for the same time frame as the Dexcom Data.
+
+```{r, warning=FALSE, message=FALSE}
+#Import weather data
+Weather <- read_csv("dataexport_20230509T201314.csv")
+
+#View weather data
+datatable(Weather)
+```
+
+## Health Data
+
+Health data was taken from an apple watch to also compare how that influences with blood sugar levels, we will look at all of these separately. 
+
+#### Load Data
+
+There is a lot of data in this file, so we first want to see how many records there are in this set. 
+
+```{r}
+#import apple watch data file
+records <- read_xml("exportholly.xml") %>%
+  xml_children
+
+#View record length
+pander(length(records))
+```
+
+From this we want to see how many records we have of each type of data collected off of the apple watch. Since some of the types of records have such a low amount, and we are trying to compare this to blood sugar data, not all of these types will be used.
+
+```{r}
+#Export record types
+record_types <- xml_attr(records, "type")
+
+#view table of record types that are pulled from the xml file
+record_types %>%
+  table(dnn="Record_type") %>%            
+  as.data.frame %>%
+  arrange(desc(Freq)) %>%
+  mutate(Count = prettyNum(Freq, big.mark=",")) %>%
+  select(-Freq) %>%
+  pander()
+```
+
+#### Getting Data for Health Data
+
+For the xml file, I have to pull out all of the records separately and join them together later. I picked the types from up above that I thought would have the most impact and had enough data to be significant. I also saved each record type into a dataframe that could be used later if wanted.
+
+```{r, warning=FALSE, message=FALSE}
+
+#######
+
+#Extract Heart Rate Recrods
+heart_rate_records <- records[which(record_types == "HKQuantityTypeIdentifierHeartRate")]
+
+single_record_attrs <- xml_attrs(heart_rate_records[10000])[[1]]
+##class(single_record_attrs)
+##data_frame(attribute = names(single_record_attrs),value= single_record_attrs)
+
+
+#Heart Rate Dataframe
+heart_rate_df <- data_frame(date = strptime(xml_attr(heart_rate_records, "endDate"), '%Y-%m-%d %H:%M:%S %z'),
+                            heart_rate = as.integer(xml_attr(heart_rate_records, "value")))
+
+heart_rate_df$date <- ymd_hms(heart_rate_df$date)
+
+Heart_Rate <- heart_rate_df %>%
+  group_by(date=floor_date(date,'hour')) %>%
+  summarize(Mean_Heart_Rate=mean(heart_rate))
+
+saveRDS(Heart_Rate, file="heart_rate_df.rds")
+
+#######
+
+#Extract active energy Records
+active_energy_records <- records[which(record_types == "HKQuantityTypeIdentifierActiveEnergyBurned")]
+
+single_record_attrs <- xml_attrs(active_energy_records[10000])[[1]]
+##class(single_record_attrs)
+##data_frame(attribute = names(single_record_attrs), value=single_record_attrs)
+
+#Active Energy Data frame
+active_energy_df <- data_frame(date = strptime(xml_attr(active_energy_records, "endDate"), '%Y-%m-%d %H:%M:%S %z'),
+                            active_energy = as.integer(xml_attr(active_energy_records, "value")))
+
+active_energy_df$date <- ymd_hms(active_energy_df$date)
+
+Active_Energy <- active_energy_df %>%
+  group_by(date=floor_date(date,'hour')) %>%
+  summarize(Mean_Active_Energy=mean(active_energy))
+
+saveRDS(Active_Energy, file="active_energy_df.rds")
+
+#######
+
+#Extract basal energy Records
+basal_energy_records <- records[which(record_types == "HKQuantityTypeIdentifierBasalEnergyBurned")]
+
+single_record_attrs <- xml_attrs(basal_energy_records[10000])[[1]]
+##class(single_record_attrs)
+##data_frame(attribute = names(single_record_attrs),value= single_record_attrs)
+
+#Basal Energy Data frame
+basal_energy_df <- data_frame(date = strptime(xml_attr(basal_energy_records, "endDate"), '%Y-%m-%d %H:%M:%S %z'),
+                            basal_energy = as.integer(xml_attr(basal_energy_records, "value")))
+
+basal_energy_df$date <- ymd_hms(basal_energy_df$date)
+
+Basal_Energy <- basal_energy_df %>%
+  group_by(date=floor_date(date,'hour')) %>%
+  summarize(Mean_Basal_Energy=mean(basal_energy))
+
+saveRDS(Basal_Energy, file="Basal_Energy.rds")
+
+#######
+
+#Extract Distance Records
+distance_records <- records[which(record_types == "HKQuantityTypeIdentifierDistanceWalkingRunning")]
+
+single_record_attrs <- xml_attrs(distance_records[10000])[[1]]
+##class(single_record_attrs)
+##data_frame(attribute = names(single_record_attrs),value= single_record_attrs)
+
+#Distance Data frame
+distance_df <- data_frame(date = strptime(xml_attr(distance_records, "endDate"), '%Y-%m-%d %H:%M:%S %z'),
+                            distance = as.integer(xml_attr(distance_records, "value")))
+
+distance_df$date <- ymd_hms(distance_df$date)
+
+Distance <- distance_df %>%
+  group_by(date=floor_date(date,'hour')) %>%
+  summarize(Distance=sum(distance))
+
+saveRDS(Distance, file="distance_df.rds")
+
+#######
+
+#Extract steps records
+steps_records <- records[which(record_types == "HKQuantityTypeIdentifierStepCount")]
+
+single_record_attrs <- xml_attrs(steps_records[10000])[[1]]
+##class(single_record_attrs)
+##data_frame(attribute = names(single_record_attrs),value = single_record_attrs)
+
+#Steps Data frame
+steps_df <- data_frame(date = strptime(xml_attr(steps_records, "endDate"), '%Y-%m-%d %H:%M:%S %z'),
+                            steps = as.integer(xml_attr(steps_records, "value")))
+
+steps_df$date <- ymd_hms(steps_df$date)
+
+Steps <- steps_df %>%
+  group_by(date=floor_date(date,'hour')) %>%
+  summarize(Steps=sum(steps))
+
+saveRDS(Steps, file="steps_df.rds")
+
+#######
+
+#Extract Stand Time Records
+stand_time_records <- records[which(record_types == "HKQuantityTypeIdentifierAppleStandTime")]
+
+single_record_attrs <- xml_attrs(stand_time_records[10000])[[1]]
+##class(single_record_attrs)
+##data_frame(attribute = names(single_record_attrs),value= single_record_attrs)
+
+#Stand Time Data frame
+stand_time_df <- data_frame(date = strptime(xml_attr(stand_time_records, "endDate"), '%Y-%m-%d %H:%M:%S %z'),
+                            stand_time = as.integer(xml_attr(stand_time_records, "value")))
+
+stand_time_df$date <- ymd_hms(stand_time_df$date)
+
+Stand_Time <- stand_time_df %>%
+  group_by(date=floor_date(date,'hour')) %>%
+  summarize(Stand_Time=sum(stand_time))
+
+saveRDS(Stand_Time, file="stand_time_df.rds")
+
+#######
+
+#Extract walking speed Records
+walking_speed_records <- records[which(record_types == "HKQuantityTypeIdentifierWalkingSpeed")]
+
+single_record_attrs <- xml_attrs(walking_speed_records[10000])[[1]]
+##class(single_record_attrs)
+
+##data_frame(attribute = names(single_record_attrs),value = single_record_attrs)
+
+#Walking Speed Data frame
+walking_speed_df <- data_frame(date = strptime(xml_attr(walking_speed_records, "endDate"), '%Y-%m-%d %H:%M:%S %z'),
+                            walking_speed = as.integer(xml_attr(walking_speed_records, "value")))
+
+walking_speed_df$date <- ymd_hms(walking_speed_df$date)
+
+Walking_Speed <- walking_speed_df %>%
+  group_by(date=floor_date(date,'hour')) %>%
+  summarize(Mean_Walking_Speed=mean(walking_speed))
+
+saveRDS(Walking_Speed, file="walking_speed_df.rds")
+
+#######
+
+#Extract Exercise Time Records
+exercise_time_records <- records[which(record_types == "HKQuantityTypeIdentifierAppleExerciseTime")]
+
+single_record_attrs <- xml_attrs(exercise_time_records[800])[[1]]
+##class(single_record_attrs)
+
+##data_frame(attribute = names(single_record_attrs),value= single_record_attrs)
+
+#Exercise Time Data frame
+exercise_time_df <- data_frame(date = strptime(xml_attr(exercise_time_records, "endDate"), '%Y-%m-%d %H:%M:%S %z'),
+                            exercise_time = as.integer(xml_attr(exercise_time_records, "value")))
+
+exercise_time_df$date <- ymd_hms(exercise_time_df$date)
+
+Exercise_Time <- exercise_time_df %>%
+  group_by(date=floor_date(date,'hour')) %>%
+  summarize(Exercise_Time=sum(exercise_time))
+
+saveRDS(Exercise_Time, file="exercise_time_df.rds")
+
+#######
+
+#Extract Stair Flights Records
+stairs_records <- records[which(record_types == "HKQuantityTypeIdentifierFlightsClimbed")]
+
+single_record_attrs <- xml_attrs(stairs_records[800])[[1]]
+##class(single_record_attrs)
+
+##data_frame(attribute = names(single_record_attrs),value= single_record_attrs)
+
+#Stair Data frame
+stairs_df <- data_frame(date = strptime(xml_attr(stairs_records, "endDate"), '%Y-%m-%d %H:%M:%S %z'),
+                            stairs = as.integer(xml_attr(stairs_records, "value")))
+
+stairs_df$date <- ymd_hms(stairs_df$date)
+
+Stairs <- stairs_df %>%
+  group_by(date=floor_date(date,'hour')) %>%
+  summarize(Stairs=mean(stairs))
+
+saveRDS(Stairs, file="stairs_df.rds")
+
+```
+
+
+## Combine all Data Sets
+
+This next part combines all of the data sets including weather and the glucose levels into one data set. I also filtered out any na for the glucose level simply because this is what we are interested in studying specifically.
+
+```{r, warning=FALSE, message=FALSE}
+#Join all data
+Diabetes <- left_join(Dex_Final, Heart_Rate, by='date')
+Diabetes <- left_join(Diabetes, Active_Energy, by='date')
+Diabetes <- left_join(Diabetes, Basal_Energy, by='date')
+Diabetes <- left_join(Diabetes, Distance, by='date')
+Diabetes <- left_join(Diabetes, Steps, by='date')
+Diabetes <- left_join(Diabetes, Stand_Time, by='date')
+Diabetes <- left_join(Diabetes, Stairs, by='date')
+Diabetes <- left_join(Diabetes, Exercise_Time, by='date')
+Diabetes <- left_join(Diabetes, Walking_Speed, by='date')
+Diabetes <- left_join(Diabetes, Weather, by=c("date"="timestamp"))
+
+#Remove NA glucose levels
+Diabetes1 <- Diabetes %>%
+  filter(!is.na(Mean_Glucose))%>%
+  mutate_if(is.numeric, round, digits=2)
+
+Diabetes1$Day <- as.Date(Diabetes1$date)
+Diabetes1$Time <- format(Diabetes1$date, "%H")
+
+#view complete dataset
+datatable(Diabetes1)
+
+```
+
+## Find Relationships
+
+Because all of my variables are numeric, I want to start by graphing every variable on a scatter plot against the glucose level. There doesn't appear to be anything significant from the plots. 
+
+```{r, warning=FALSE, message=FALSE}
+
+#There were too many to actually be able to see anything significant
+#pairs(Diabetes1, col = 'darkblue', main = "Pairs Plot for All Variables")
+
+#help with plot visualization
+par(mfrow = c(3, 4))
+
+ggplot(Diabetes1, aes(x=Mean_Heart_Rate, y=mean(Mean_Glucose)))+
+         geom_point(color='darkblue', pch=18)+
+        theme_bw()
+
+ggplot(Diabetes1, aes(x=Mean_Active_Energy, y=mean(Mean_Glucose)))+
+         geom_point(color='darkblue', pch=18)+
+        theme_bw()
+
+ggplot(Diabetes1, aes(x=Mean_Basal_Energy, y=mean(Mean_Glucose)))+
+         geom_point(color='darkblue', pch=18)+
+        theme_bw()
+
+#This plot did not provide anything helpful, it was a vertical line at the 0
+#ggplot(Diabetes1, aes(x=Distance, y=Mean_Glucose))+
+        #geom_point(color='darkblue', pch=18)+
+        #theme_bw()
+
+ggplot(Diabetes1, aes(x=Steps, y=mean(Mean_Glucose)))+
+         geom_point(color='darkblue', pch=18)+
+        theme_bw()
+
+ggplot(Diabetes1, aes(x=Stand_Time, y=mean(Mean_Glucose)))+
+         geom_point(color='darkblue', pch=18)+
+        theme_bw()
+
+ggplot(Diabetes1, aes(x=Stairs, y=mean(Mean_Glucose)))+
+         geom_point(color='darkblue', pch=18)+
+        theme_bw()
+
+ggplot(Diabetes1, aes(x=Exercise_Time, y=mean(Mean_Glucose)))+
+         geom_point(color='darkblue', pch=18)+
+        theme_bw()
+
+ggplot(Diabetes1, aes(x=Mean_Walking_Speed, y=mean(Mean_Glucose)))+
+         geom_point(color='darkblue', pch=18)+
+        theme_bw()
+
+ggplot(Diabetes1, aes(x=Temperature, y=mean(Mean_Glucose)))+
+         geom_point(color='darkblue', pch=18)+
+        theme_bw()
+
+ggplot(Diabetes1, aes(x=Precipitation_Total, y=mean(Mean_Glucose)))+
+         geom_point(color='darkblue', pch=18)+
+        theme_bw()
+
+ggplot(Diabetes1, aes(x=Humidity, y=mean(Mean_Glucose)))+
+         geom_point(color='darkblue', pch=18)+
+        theme_bw()
+
+ggplot(Diabetes1, aes(x=Cloud_Cover, y=mean(Mean_Glucose)))+
+         geom_point(color='darkblue', pch=18)+
+        theme_bw()
+
+ggplot(Diabetes1, aes(x=Sunshine_Duration, y=mean(Mean_Glucose)))+
+         geom_point(color='darkblue', pch=18)+
+        theme_bw()
+```
+
+```{r}
+ggplot(Diabetes1, aes(x=Time, y=Mean_Glucose))+
+  geom_boxplot(fill="dodgerblue3", color='black')+
+  labs(title = "Average Glucose Level Throughout the Day", y="Glucose Level", x="Hour of the Day")+
+  theme_bw()
+```
+
+
+```{r}
+ggplot(Diabetes1, aes(x = Day, y = Mean_Glucose)) + 
+  geom_point(fun = "mean", stat="summary", color="dodgerblue3", pch=18)+
+  labs(title = "Average Glucose Throughout the Year", y="Glucose Level", x="Date")+
+  theme_bw()
+```
+
+```{r, warning=FALSE}
+ggplot(Diabetes1, aes(x = Mean_Heart_Rate, y = Mean_Glucose)) + 
+  geom_point(fun = "mean", stat="summary", color="dodgerblue3", pch=18)+
+  labs(title = "Average Glucose by Heart Rate", y="Glucose Level", x="Heart Rate")+
+  theme_bw()
+```
+
+```{r, warning=FALSE}
+ggplot(Diabetes1, aes(x = Mean_Active_Energy, y = Mean_Glucose)) + 
+  geom_bar(fun = "mean", stat="summary", color="dodgerblue3")+
+  labs(title = "Average Glucose by Active Energy", y="Glucose Level", x="Active Energy")+
+  theme_bw()
+```
+
+```{r, warning=FALSE}
+ggplot(Diabetes1, aes(x = Mean_Basal_Energy, y = Mean_Glucose)) + 
+  geom_point(fun = "mean", stat="summary", color="dodgerblue3", pch=18)+
+  labs(title = "Average Glucose by Basal Energy", y="Glucose Level", x="Basal Energy")+
+  theme_bw()
+```
+
+```{r, warning=FALSE}
+ggplot(Diabetes1, aes(x = Steps, y = Mean_Glucose)) + 
+  geom_point(fun = "mean", stat="summary", color="dodgerblue3", pch=18)+
+  labs(title = "Average Glucose by Steps", y="Glucose Level", x="Steps in a Day")+
+  theme_bw()
+```
+
+```{r, warning=FALSE}
+ggplot(Diabetes1, aes(x = Stand_Time, y = Mean_Glucose)) + 
+  geom_bar(fun = "mean", stat="summary", fill="dodgerblue3")+
+  labs(title = "Average Glucose by Stand Time", y="Glucose Level", x="Stand Time")+
+  theme_bw()
+```
+
+```{r, warning=FALSE}
+ggplot(Diabetes1, aes(x = Stairs, y = Mean_Glucose)) + 
+  geom_bar(fun = "mean", stat="summary", fill="dodgerblue3")+
+  labs(title = "Average Glucose by Stairs", y="Glucose Level", x="Stairs")+
+  theme_bw()
+```
+
+```{r, warning=FALSE}
+ggplot(Diabetes1, aes(x = Exercise_Time, y = Mean_Glucose)) + 
+  geom_bar(fun = "mean", stat="summary", fill="dodgerblue3")+
+  labs(title = "Average Glucose by Exercise Time", y="Glucose Level", x="Exercise Time")+
+  theme_bw()
+```
+
+```{r, warning=FALSE}
+ggplot(Diabetes1, aes(x = Mean_Walking_Speed, y = Mean_Glucose)) + 
+  geom_point(fun = "mean", stat="summary", color="dodgerblue3", pch=18)+
+  labs(title = "Average Glucose by Walking Speed", y="Glucose Level", x="Walking Speed")+
+  theme_bw()
+```
+
+```{r, warning=FALSE}
+ggplot(Diabetes1, aes(x = Temperature, y = Mean_Glucose)) + 
+  geom_point(fun = "mean", stat="summary", color="dodgerblue3", pch=18)+
+  labs(title = "Average Glucose by Temperature", y="Glucose Level", x="Temperature")+
+  theme_bw()
+```
+
+```{r, warning=FALSE}
+ggplot(Diabetes1, aes(x = Precipitation_Total, y = Mean_Glucose)) + 
+  geom_point(fun = "mean", stat="summary", color="dodgerblue3", pch=18)+
+  labs(title = "Average Glucose by Precipitation", y="Glucose Level", x="Precipitation")+
+  theme_bw()
+```
+
+```{r, warning=FALSE}
+ggplot(Diabetes1, aes(x = Humidity, y = Mean_Glucose)) + 
+  geom_point(fun = "mean", stat="summary", color="dodgerblue3", pch=18)+
+  labs(title = "Average Glucose by Humidity", y="Glucose Level", x="Humidity")+
+  theme_bw()
+```
+
+```{r, warning=FALSE}
+ggplot(Diabetes1, aes(x = Cloud_Cover, y = Mean_Glucose)) + 
+  geom_point(fun = "mean", stat="summary", color="dodgerblue3", pch=18)+
+  labs(title = "Average Glucose by Cloud Coverage", y="Glucose Level", x="Cloud Coverage")+
+  theme_bw()
+```
+
+```{r, warning=FALSE}
+ggplot(Diabetes1, aes(x = Sunshine_Duration, y = Mean_Glucose)) + 
+  geom_point(fun = "mean", stat="summary", color="dodgerblue3", pch=18)+
+  labs(title = "Average Glucose by Sunshine Duration", y="Glucose Level", x="Sunshine Duration")+
+  theme_bw()
+```
+
+
+
+
