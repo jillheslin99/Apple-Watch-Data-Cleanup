@@ -1,0 +1,620 @@
+# Required packages
+library(pander)
+library(magrittr)
+library(dplyr)
+library(xml2)
+library(tidyverse)
+library(readr)
+library(XML)
+library(car)
+library(DT)
+library(shiny)
+library(lubridate)
+
+# UI
+ui <- fluidPage(
+  tags$head(
+    tags$style(
+      HTML("
+        body {
+          color: #23395d; /* Change the font color for the entire app */
+        }
+        .fancy-title {
+          font-family: 'Helvetica', sans-serif;
+          font-size: 50px;
+          font-weight: bold;
+          color: #152238;
+        }
+        .sidebar {
+          background-color: #b7bccc;
+          padding: 20px;
+          border-radius: 5px;
+          box-shadow: 0px 0px 5px rgba(0, 0, 0, 0.2);
+        }
+      ")
+    )
+  ),
+  titlePanel(
+    tags$h1(class= 'fancy-title',"Apple Health Data Conversion to CSV")
+  ),
+  tags$style(
+    HTML("
+      .subtitle {
+        font-size: 16px;
+        font-weight: bold;
+        color: #808080;
+      }
+    ")
+  ),
+  sidebarLayout(
+    sidebarPanel(
+      verbatimTextOutput("textSection"),
+      tags$p(class = "subtitle", "To get Apple Health data, go into the 'Health' app.
+             In the profile section there is an option to 'Export all Health Data.'
+             This will give you an XML file that can be uploaded here! Conversion may take
+             a few minutes due to the file size. Wait until the screen says 'Conversion Complete'
+             before downloading your file."),
+      br(),
+      br(),
+      fileInput("file", "Choose XML File", accept = c(".xml")),
+      actionButton("convert", "Convert to CSV"),
+      downloadButton("download", "Download CSV"),
+      textOutput("status"),
+      br(),
+      br(),
+      textOutput("description"),
+      br(),
+      textOutput("warning")
+    ),
+    
+    mainPanel(
+      DTOutput("dataframeHead")
+      
+    )
+  )
+)
+
+# Server
+server <- function(input, output) {
+
+  
+  # Convert XML to CSV
+  observeEvent(input$convert, {
+    req(input$file)
+    
+    # Read XML file
+    records <- read_xml(input$file$datapath) %>%
+      xml_children
+    
+    #######
+    
+    #Extract Heart Rate Records
+    heart_rate_records <- records[which(record_types == "HKQuantityTypeIdentifierHeartRate")]
+    
+    #Heart Rate Dataframe
+    heart_rate_df <- data_frame(date = strptime(xml_attr(heart_rate_records, "endDate"), '%Y-%m-%d %H:%M:%S %z'),
+                                heart_rate = as.integer(xml_attr(heart_rate_records, "value")))
+    
+    #Fix the date so that the format can join our records later
+    heart_rate_df$date <- ymd_hms(heart_rate_df$date)
+    
+    #all of the data is at a minute in time, we would have a lot of NAs if we kept to minutes so this changes it to take the average for the hour, this could also be changed to day if that would be better for your data.
+    Heart_Rate <- heart_rate_df %>%
+      group_by(date=floor_date(date,'hour')) %>%
+      summarize(Mean_Heart_Rate=mean(heart_rate))
+    
+    
+    #######
+    
+    #Extract active energy Records
+    active_energy_records <- records[which(record_types == "HKQuantityTypeIdentifierActiveEnergyBurned")]
+    
+    #Active Energy Data frame
+    active_energy_df <- data_frame(date = strptime(xml_attr(active_energy_records, "endDate"), '%Y-%m-%d %H:%M:%S %z'),
+                                   active_energy = as.integer(xml_attr(active_energy_records, "value")))
+    
+    active_energy_df$date <- ymd_hms(active_energy_df$date)
+    
+    Active_Energy <- active_energy_df %>%
+      group_by(date=floor_date(date,'hour')) %>%
+      summarize(Mean_Active_Energy=mean(active_energy))
+    
+    
+    #######
+    
+    #Extract basal energy Records
+    basal_energy_records <- records[which(record_types == "HKQuantityTypeIdentifierBasalEnergyBurned")]
+    
+    #Basal Energy Data frame
+    basal_energy_df <- data_frame(date = strptime(xml_attr(basal_energy_records, "endDate"), '%Y-%m-%d %H:%M:%S %z'),
+                                  basal_energy = as.integer(xml_attr(basal_energy_records, "value")))
+    
+    basal_energy_df$date <- ymd_hms(basal_energy_df$date)
+    
+    Basal_Energy <- basal_energy_df %>%
+      group_by(date=floor_date(date,'hour')) %>%
+      summarize(Mean_Basal_Energy=mean(basal_energy))
+    
+    
+    #######
+    
+    #Extract Distance Records
+    distance_records <- records[which(record_types == "HKQuantityTypeIdentifierDistanceWalkingRunning")]
+    
+    
+    #Distance Data frame
+    distance_df <- data_frame(date = strptime(xml_attr(distance_records, "endDate"), '%Y-%m-%d %H:%M:%S %z'),
+                              distance = as.integer(xml_attr(distance_records, "value")))
+    
+    distance_df$date <- ymd_hms(distance_df$date)
+    
+    Distance <- distance_df %>%
+      group_by(date=floor_date(date,'hour')) %>%
+      summarize(Distance=sum(distance))
+    
+    
+    #######
+    
+    #Extract steps records
+    steps_records <- records[which(record_types == "HKQuantityTypeIdentifierStepCount")]
+    
+    #Steps Data frame
+    steps_df <- data_frame(date = strptime(xml_attr(steps_records, "endDate"), '%Y-%m-%d %H:%M:%S %z'),
+                           steps = as.integer(xml_attr(steps_records, "value")))
+    
+    steps_df$date <- ymd_hms(steps_df$date)
+    
+    Steps <- steps_df %>%
+      group_by(date=floor_date(date,'hour')) %>%
+      summarize(Steps=sum(steps))
+    
+    
+    #######
+    
+    #Extract Stand Time Records
+    stand_time_records <- records[which(record_types == "HKQuantityTypeIdentifierAppleStandTime")]
+    
+    #Stand Time Data frame
+    stand_time_df <- data_frame(date = strptime(xml_attr(stand_time_records, "endDate"), '%Y-%m-%d %H:%M:%S %z'),
+                                stand_time = as.integer(xml_attr(stand_time_records, "value")))
+    
+    stand_time_df$date <- ymd_hms(stand_time_df$date)
+    
+    Stand_Time <- stand_time_df %>%
+      group_by(date=floor_date(date,'hour')) %>%
+      summarize(Stand_Time=sum(stand_time))
+    
+    
+    #######
+    
+    #Extract walking speed Records
+    walking_speed_records <- records[which(record_types == "HKQuantityTypeIdentifierWalkingSpeed")]
+    
+    #Walking Speed Data frame
+    walking_speed_df <- data_frame(date = strptime(xml_attr(walking_speed_records, "endDate"), '%Y-%m-%d %H:%M:%S %z'),
+                                   walking_speed = as.integer(xml_attr(walking_speed_records, "value")))
+    
+    walking_speed_df$date <- ymd_hms(walking_speed_df$date)
+    
+    Walking_Speed <- walking_speed_df %>%
+      group_by(date=floor_date(date,'hour')) %>%
+      summarize(Mean_Walking_Speed=mean(walking_speed))
+    
+    
+    #######
+    
+    #Extract Exercise Time Records
+    exercise_time_records <- records[which(record_types == "HKQuantityTypeIdentifierAppleExerciseTime")]
+    
+    #Exercise Time Data frame
+    exercise_time_df <- data_frame(date = strptime(xml_attr(exercise_time_records, "endDate"), '%Y-%m-%d %H:%M:%S %z'),
+                                   exercise_time = as.integer(xml_attr(exercise_time_records, "value")))
+    
+    exercise_time_df$date <- ymd_hms(exercise_time_df$date)
+    
+    Exercise_Time <- exercise_time_df %>%
+      group_by(date=floor_date(date,'hour')) %>%
+      summarize(Exercise_Time=sum(exercise_time))
+    
+    #######
+    
+    #Extract Stair Flights Records
+    stairs_records <- records[which(record_types == "HKQuantityTypeIdentifierFlightsClimbed")]
+    
+    #Stair Data frame
+    stairs_df <- data_frame(date = strptime(xml_attr(stairs_records, "endDate"), '%Y-%m-%d %H:%M:%S %z'),
+                            stairs = as.integer(xml_attr(stairs_records, "value")))
+    
+    stairs_df$date <- ymd_hms(stairs_df$date)
+    
+    Stairs <- stairs_df %>%
+      group_by(date=floor_date(date,'hour')) %>%
+      summarize(Stairs=sum(stairs))
+    
+    #######
+    
+    #Extract Step Length Records
+    step_length_records <- records[which(record_types == "HKQuantityTypeIdentifierWalkingStepLength")]
+    
+    #Step Length Data frame
+    step_length_df <- data_frame(date = strptime(xml_attr(step_length_records, "endDate"), '%Y-%m-%d %H:%M:%S %z'),
+                                 step_length = as.integer(xml_attr(step_length_records, "value")))
+    
+    step_length_df$date <- ymd_hms(step_length_df$date)
+    
+    Step_Length <- step_length_df %>%
+      group_by(date=floor_date(date,'hour')) %>%
+      summarize(Step_Length=mean(step_length))
+    
+    #######
+    
+    #Extract Walking Double Support Records
+    walk_double_records <- records[which(record_types == "HKQuantityTypeIdentifierWalkingDoubleSupportPercentage")]
+    
+    #Walking Double Support Data frame
+    walk_double_df <- data_frame(date = strptime(xml_attr(walk_double_records, "endDate"), '%Y-%m-%d %H:%M:%S %z'),
+                                 walk_double = as.integer(xml_attr(walk_double_records, "value")))
+    
+    walk_double_df$date <- ymd_hms(walk_double_df$date)
+    
+    Walk_Double <- walk_double_df %>%
+      group_by(date=floor_date(date,'hour')) %>%
+      summarize(Walk_Double=mean(walk_double))
+    
+    #######
+    
+    #Extract Walking Asymmetry Records
+    walk_asymmetry_records <- records[which(record_types == "HKQuantityTypeIdentifierWalkingAsymmetryPercentage")]
+    
+    #Walking Asymmetry Data frame
+    walk_asymmetry_df <- data_frame(date = strptime(xml_attr(walk_asymmetry_records, "endDate"), '%Y-%m-%d %H:%M:%S %z'),
+                                    walk_asymmetry = as.integer(xml_attr(walk_asymmetry_records, "value")))
+    
+    walk_asymmetry_df$date <- ymd_hms(walk_asymmetry_df$date)
+    
+    Walk_Asymmetry <- walk_asymmetry_df %>%
+      group_by(date=floor_date(date,'hour')) %>%
+      summarize(Walk_Asymmetry=mean(walk_asymmetry))
+    
+    #######
+    
+    #Extract Sleep Analysis Support Records
+    sleep_records <- records[which(record_types == "HKCategoryTypeIdentifierSleepAnalysis")]
+    
+    #Sleep Data frame
+    sleep_df <- data_frame(date = strptime(xml_attr(sleep_records, "endDate"), '%Y-%m-%d %H:%M:%S %z'),
+                           sleep = as.integer(xml_attr(sleep_records, "value")))
+    
+    sleep_df$date <- ymd_hms(sleep_df$date)
+    
+    Sleep <- sleep_df %>%
+      group_by(date=floor_date(date,'hour')) %>%
+      summarize(Sleep=mean(sleep))
+    
+    #######
+    
+    #Extract Heart Rate Variability Records
+    heart_rate_variability_records <- records[which(record_types == "HKQuantityTypeIdentifierHeartRateVariabilitySDNN")]
+    
+    #Heart Rate Variability Data frame
+    heart_rate_variability_df <- data_frame(date = strptime(xml_attr(heart_rate_variability_records, "endDate"), '%Y-%m-%d %H:%M:%S %z'),
+                                            heart_rate_variability = as.integer(xml_attr(heart_rate_variability_records, "value")))
+    
+    heart_rate_variability_df$date <- ymd_hms(heart_rate_variability_df$date)
+    
+    Heart_Rate_Variability <- heart_rate_variability_df %>%
+      group_by(date=floor_date(date,'hour')) %>%
+      summarize(Heart_Rate_Variability=mean(heart_rate_variability))
+    
+    #######
+    
+    #Extract Environment Audio Exposure Records
+    enviornment_audio_exposure_records <- records[which(record_types == "HKQuantityTypeIdentifierEnvironmentalAudioExposure")]
+    
+    #Environment Audio Exposure Data frame
+    enviornment_audio_exposure_df <- data_frame(date = strptime(xml_attr(enviornment_audio_exposure_records, "endDate"), '%Y-%m-%d %H:%M:%S %z'),
+                                                enviornment_audio_exposure = as.integer(xml_attr(enviornment_audio_exposure_records, "value")))
+    
+    enviornment_audio_exposure_df$date <- ymd_hms(enviornment_audio_exposure_df$date)
+    
+    Enviornment_Audio_Exposure <- enviornment_audio_exposure_df %>%
+      group_by(date=floor_date(date,'hour')) %>%
+      summarize(Enviornment_Audio_Exposure=mean(enviornment_audio_exposure))
+    
+    #######
+    
+    #Extract Headphone Audio Exposure Records
+    headphone_audio_exposure_records <- records[which(record_types == "HKQuantityTypeIdentifierHeadphoneAudioExposure")]
+    
+    #Headphone Audio Exposure Data frame
+    headphone_audio_exposure_df <- data_frame(date = strptime(xml_attr(headphone_audio_exposure_records, "endDate"), '%Y-%m-%d %H:%M:%S %z'),
+                                              headphone_audio_exposure = as.integer(xml_attr(headphone_audio_exposure_records, "value")))
+    
+    headphone_audio_exposure_df$date <- ymd_hms(headphone_audio_exposure_df$date)
+    
+    Headphone_Audio_Exposure <- headphone_audio_exposure_df %>%
+      group_by(date=floor_date(date,'hour')) %>%
+      summarize(Headphone_Audio_Exposure=mean(headphone_audio_exposure))
+    
+    #######
+    
+    #Extract Stair Ascent Speed Records
+    stair_ascent_speed_records <- records[which(record_types == "HKQuantityTypeIdentifierStairAscentSpeed")]
+    
+    #Stair Ascent Speed Data frame
+    stair_ascent_speed_df <- data_frame(date = strptime(xml_attr(stair_ascent_speed_records, "endDate"), '%Y-%m-%d %H:%M:%S %z'),
+                                        stair_ascent_speed = as.integer(xml_attr(stair_ascent_speed_records, "value")))
+    
+    stair_ascent_speed_df$date <- ymd_hms(stair_ascent_speed_df$date)
+    
+    Stair_Ascent_Speed <- stair_ascent_speed_df %>%
+      group_by(date=floor_date(date,'hour')) %>%
+      summarize(Stair_Ascent_Speed=mean(stair_ascent_speed))
+    
+    #######
+    
+    #Extract Stair Descent Speed Records
+    stair_descent_speed_records <- records[which(record_types == "HKQuantityTypeIdentifierStairDescentSpeed")]
+    
+    #Stair Descent Speed Data frame
+    stair_descent_speed_df <- data_frame(date = strptime(xml_attr(stair_descent_speed_records, "endDate"), '%Y-%m-%d %H:%M:%S %z'),
+                                         stair_descent_speed = as.integer(xml_attr(stair_descent_speed_records, "value")))
+    
+    stair_descent_speed_df$date <- ymd_hms(stair_descent_speed_df$date)
+    
+    Stair_Descent_Speed <- stair_descent_speed_df %>%
+      group_by(date=floor_date(date,'hour')) %>%
+      summarize(Stair_Descent_Speed=mean(stair_descent_speed))
+    
+    #######
+    
+    #Extract Resting Heart Rate Records
+    resting_heart_rate_records <- records[which(record_types == "HKQuantityTypeIdentifierRestingHeartRate")]
+    
+    #Resting Heart Rate Data frame
+    resting_heart_rate_df <- data_frame(date = strptime(xml_attr(resting_heart_rate_records, "endDate"), '%Y-%m-%d %H:%M:%S %z'),
+                                        resting_heart_rate = as.integer(xml_attr(resting_heart_rate_records, "value")))
+    
+    resting_heart_rate_df$date <- ymd_hms(resting_heart_rate_df$date)
+    
+    Resting_Heart_Rate <- resting_heart_rate_df %>%
+      group_by(date=floor_date(date,'hour')) %>%
+      summarize(Resting_Heart_Rate=mean(resting_heart_rate))
+    
+    #######
+    
+    #Extract Walking Heart Rate Records
+    walking_heart_rate_records <- records[which(record_types == "HKQuantityTypeIdentifierWalkingHeartRateAverage")]
+    
+    #Walking Heart Rate Data frame
+    walking_heart_rate_df <- data_frame(date = strptime(xml_attr(walking_heart_rate_records, "endDate"), '%Y-%m-%d %H:%M:%S %z'),
+                                        walking_heart_rate = as.integer(xml_attr(walking_heart_rate_records, "value")))
+    
+    walking_heart_rate_df$date <- ymd_hms(walking_heart_rate_df$date)
+    
+    Walking_Heart_Rate <- walking_heart_rate_df %>%
+      group_by(date=floor_date(date,'hour')) %>%
+      summarize(Walking_Heart_Rate=mean(walking_heart_rate))
+    
+    #######
+    
+    #Extract Respiratory Rate Records
+    respiratory_rate_records <- records[which(record_types == "HKQuantityTypeIdentifierRespiratoryRate")]
+    
+    #Respiratory Rate Data frame
+    respiratory_rate_df <- data_frame(date = strptime(xml_attr(respiratory_rate_records, "endDate"), '%Y-%m-%d %H:%M:%S %z'),
+                                      respiratory_rate = as.integer(xml_attr(respiratory_rate_records, "value")))
+    
+    respiratory_rate_df$date <- ymd_hms(respiratory_rate_df$date)
+    
+    Respiratory_Rate <- respiratory_rate_df %>%
+      group_by(date=floor_date(date,'hour')) %>%
+      summarize(Respiratory_Rate=mean(respiratory_rate))
+    
+    #######
+    
+    #Extract Hand Wash Records
+    hand_wash_records <- records[which(record_types == "HKCategoryTypeIdentifierHandwashingEvent")]
+    
+    #Hand Wash Data frame
+    hand_wash_df <- data_frame(date = strptime(xml_attr(hand_wash_records, "endDate"), '%Y-%m-%d %H:%M:%S %z'),
+                               hand_wash = as.integer(xml_attr(hand_wash_records, "value")))
+    
+    hand_wash_df$date <- ymd_hms(hand_wash_df$date)
+    
+    Hand_Wash <- hand_wash_df %>%
+      group_by(date=floor_date(date,'hour')) %>%
+      summarize(Hand_Wash=mean(hand_wash))
+    
+    #######
+    
+    #Extract Walk Steadiness Records
+    walk_steadiness_records <- records[which(record_types == "HKQuantityTypeIdentifierAppleWalkingSteadiness")]
+    
+    #Walk Steadiness Data frame
+    walk_steadiness_df <- data_frame(date = strptime(xml_attr(walk_steadiness_records, "endDate"), '%Y-%m-%d %H:%M:%S %z'),
+                                     walk_steadiness = as.integer(xml_attr(walk_steadiness_records, "value")))
+    
+    walk_steadiness_df$date <- ymd_hms(walk_steadiness_df$date)
+    
+    Walk_Steadiness <- walk_steadiness_df %>%
+      group_by(date=floor_date(date,'hour')) %>%
+      summarize(Walk_Steadiness=mean(walk_steadiness))
+    
+    #######
+    
+    #Extract Body Mass Records
+    body_mass_records <- records[which(record_types == "HKQuantityTypeIdentifierBodyMass")]
+    
+    #Body Mass Data frame
+    body_mass_df <- data_frame(date = strptime(xml_attr(body_mass_records, "endDate"), '%Y-%m-%d %H:%M:%S %z'),
+                               body_mass = as.integer(xml_attr(body_mass_records, "value")))
+    
+    body_mass_df$date <- ymd_hms(body_mass_df$date)
+    
+    Body_Mass <- body_mass_df %>%
+      group_by(date=floor_date(date,'hour')) %>%
+      summarize(Body_Mass=mean(body_mass))
+    
+    #######
+    
+    #Extract VO2 Max Records
+    vo2_max_records <- records[which(record_types == "HKQuantityTypeIdentifierVO2Max")]
+    
+    #Vo2 Max Data frame
+    vo2_max_df <- data_frame(date = strptime(xml_attr(vo2_max_records, "endDate"), '%Y-%m-%d %H:%M:%S %z'),
+                             vo2_max = as.integer(xml_attr(vo2_max_records, "value")))
+    
+    vo2_max_df$date <- ymd_hms(vo2_max_df$date)
+    
+    Vo2_Max <- vo2_max_df %>%
+      group_by(date=floor_date(date,'hour')) %>%
+      summarize(Vo2_Max=mean(vo2_max))
+    
+    #######
+    
+    #Extract Swim Distance Records
+    swim_distance_records <- records[which(record_types == "HKQuantityTypeIdentifierDistanceSwimming")]
+    
+    #Hand Wash Data frame
+    swim_distance_df <- data_frame(date = strptime(xml_attr(swim_distance_records, "endDate"), '%Y-%m-%d %H:%M:%S %z'),
+                                   swim_distance = as.integer(xml_attr(swim_distance_records, "value")))
+    
+    swim_distance_df$date <- ymd_hms(swim_distance_df$date)
+    
+    Swim_Distance <- swim_distance_df %>%
+      group_by(date=floor_date(date,'hour')) %>%
+      summarize(Swim_Distance=sum(swim_distance))
+    
+    #######
+    
+    #Extract Swimming Stroke Count Records
+    swim_stroke_records <- records[which(record_types == "HKQuantityTypeIdentifierSwimmingStrokeCount")]
+    
+    #Swim Stroke Data frame
+    swim_stroke_df <- data_frame(date = strptime(xml_attr(swim_stroke_records, "endDate"), '%Y-%m-%d %H:%M:%S %z'),
+                                 swim_stroke = as.integer(xml_attr(swim_stroke_records, "value")))
+    
+    swim_stroke_df$date <- ymd_hms(swim_stroke_df$date)
+    
+    Swim_Stroke <- swim_stroke_df %>%
+      group_by(date=floor_date(date,'hour')) %>%
+      summarize(Swim_Stroke=sum(swim_stroke))
+    
+    #######
+    
+    #Extract Mindful Records
+    mindful_records <- records[which(record_types == "HKCategoryTypeIdentifierMindfulSession")]
+    
+    #Mindful Data frame
+    mindful_df <- data_frame(date = strptime(xml_attr(mindful_records, "endDate"), '%Y-%m-%d %H:%M:%S %z'),
+                             mindful = as.integer(xml_attr(mindful_records, "value")))
+    
+    mindful_df$date <- ymd_hms(mindful_df$date)
+    
+    Mindful <- mindful_df %>%
+      group_by(date=floor_date(date,'hour')) %>%
+      summarize(Mindful=mean(mindful))
+    
+    #######
+    
+    #Extract Dietary Water Records
+    dietary_water_records <- records[which(record_types == "HKQuantityTypeIdentifierDietaryWater")]
+    
+    #Dietary Water Data frame
+    dietary_water_df <- data_frame(date = strptime(xml_attr(dietary_water_records, "endDate"), '%Y-%m-%d %H:%M:%S %z'),
+                                   dietary_water = as.integer(xml_attr(dietary_water_records, "value")))
+    
+    dietary_water_df$date <- ymd_hms(dietary_water_df$date)
+    
+    Dietary_Water <- dietary_water_df %>%
+      group_by(date=floor_date(date,'hour')) %>%
+      summarize(Dietary_Water=mean(dietary_water))
+    
+    #######
+    
+    #Extract Cycling Records
+    cycling_records <- records[which(record_types == "HKQuantityTypeIdentifierDistanceCycling")]
+    
+    #Cycling Data frame
+    cycling_df <- data_frame(date = strptime(xml_attr(cycling_records, "endDate"), '%Y-%m-%d %H:%M:%S %z'),
+                             cycling = as.integer(xml_attr(cycling_records, "value")))
+    
+    cycling_df$date <- ymd_hms(cycling_df$date)
+    
+    Cycling <- cycling_df %>%
+      group_by(date=floor_date(date,'hour')) %>%
+      summarize(Cycling=sum(cycling))
+    
+    AppleWatch <- left_join(Heart_Rate, Active_Energy, by='date')
+    AppleWatch <- left_join(AppleWatch, Basal_Energy, by='date')
+    AppleWatch <- left_join(AppleWatch, Distance, by='date')
+    AppleWatch <- left_join(AppleWatch, Steps, by='date')
+    AppleWatch <- left_join(AppleWatch, Stand_Time, by='date')
+    AppleWatch <- left_join(AppleWatch, Stairs, by='date')
+    AppleWatch <- left_join(AppleWatch, Exercise_Time, by='date')
+    AppleWatch <- left_join(AppleWatch, Walking_Speed, by='date')
+    AppleWatch <- left_join(AppleWatch, Walk_Double, by='date')
+    AppleWatch <- left_join(AppleWatch, Walk_Asymmetry, by='date')
+    AppleWatch <- left_join(AppleWatch, Sleep, by='date')
+    AppleWatch <- left_join(AppleWatch, Heart_Rate_Variability, by='date')
+    AppleWatch <- left_join(AppleWatch, Enviornment_Audio_Exposure, by='date')
+    AppleWatch <- left_join(AppleWatch, Headphone_Audio_Exposure, by='date')
+    AppleWatch <- left_join(AppleWatch, Stair_Ascent_Speed, by='date')
+    AppleWatch <- left_join(AppleWatch, Stair_Descent_Speed, by='date')
+    AppleWatch <- left_join(AppleWatch, Resting_Heart_Rate, by='date')
+    AppleWatch <- left_join(AppleWatch, Walking_Heart_Rate, by='date')
+    AppleWatch <- left_join(AppleWatch, Respiratory_Rate, by='date')
+    AppleWatch <- left_join(AppleWatch, Hand_Wash, by='date')
+    AppleWatch <- left_join(AppleWatch, Walk_Steadiness, by='date')
+    AppleWatch <- left_join(AppleWatch, Body_Mass, by='date')
+    AppleWatch <- left_join(AppleWatch, Vo2_Max, by='date')
+    AppleWatch <- left_join(AppleWatch, Swim_Distance, by='date')
+    AppleWatch <- left_join(AppleWatch, Swim_Stroke, by='date')
+    AppleWatch <- left_join(AppleWatch, Mindful, by='date')
+    AppleWatch <- left_join(AppleWatch, Dietary_Water, by='date')
+    AppleWatch <- left_join(AppleWatch, Cycling, by='date')
+    
+    #This rounds the decimal places since there are a lot of digits
+    AppleHealth <- AppleWatch %>%
+      mutate_if(is.numeric, round, digits=2)
+    
+    # Save as CSV
+    write.csv(AppleHealth, "apple_health.csv", row.names = FALSE)
+    
+    # Display status
+    output$status <- renderText("Conversion completed!")
+    
+    # Display Data
+    output$dataframeHead <- renderDT(
+      head(AppleHealth), extensions='Responsive')
+    
+    # Data Descriptions
+    output$description <- renderText("The table shows the first few rows of the converted data,
+                                     to see all columns for a row, select the green button. This will give you
+                                     a good idea of what your data looks like before you download it!
+                                     ")
+    
+    output$warning <- renderText("Beware that there may be a large amount of NAs as this is data for every hour
+    of the day so there is room for error. Also note that not all data will be gathered the same on every apple device
+    due to settings, updates and device placement during data gathering.
+                                     ")
+  })
+    
+    
+  # Provide download link for CSV
+  output$download <- downloadHandler(
+    filename = function() {
+      "apple_health.csv"
+    },
+    content = function(file) {
+      file.copy("apple_health.csv", file)
+    }
+  )
+}
+
+# Increase File Upload Size
+options(shiny.maxRequestSize = 400000000000000)
+
+# Run the app
+shinyApp(ui, server)

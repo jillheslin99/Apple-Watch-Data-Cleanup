@@ -342,75 +342,9 @@ datatable(Diabetes1)
 
 ```
 
-## Find Relationships
+## Find Relationships With Glucose
 
 Because all of my variables are numeric, I want to start by graphing every variable on a scatter plot against the glucose level. There doesn't appear to be anything significant from the plots. 
-
-```{r, warning=FALSE, message=FALSE}
-
-#There were too many to actually be able to see anything significant
-#pairs(Diabetes1, col = 'darkblue', main = "Pairs Plot for All Variables")
-
-#help with plot visualization
-par(mfrow = c(3, 4))
-
-ggplot(Diabetes1, aes(x=Mean_Heart_Rate, y=mean(Mean_Glucose)))+
-         geom_point(color='darkblue', pch=18)+
-        theme_bw()
-
-ggplot(Diabetes1, aes(x=Mean_Active_Energy, y=mean(Mean_Glucose)))+
-         geom_point(color='darkblue', pch=18)+
-        theme_bw()
-
-ggplot(Diabetes1, aes(x=Mean_Basal_Energy, y=mean(Mean_Glucose)))+
-         geom_point(color='darkblue', pch=18)+
-        theme_bw()
-
-#This plot did not provide anything helpful, it was a vertical line at the 0
-#ggplot(Diabetes1, aes(x=Distance, y=Mean_Glucose))+
-        #geom_point(color='darkblue', pch=18)+
-        #theme_bw()
-
-ggplot(Diabetes1, aes(x=Steps, y=mean(Mean_Glucose)))+
-         geom_point(color='darkblue', pch=18)+
-        theme_bw()
-
-ggplot(Diabetes1, aes(x=Stand_Time, y=mean(Mean_Glucose)))+
-         geom_point(color='darkblue', pch=18)+
-        theme_bw()
-
-ggplot(Diabetes1, aes(x=Stairs, y=mean(Mean_Glucose)))+
-         geom_point(color='darkblue', pch=18)+
-        theme_bw()
-
-ggplot(Diabetes1, aes(x=Exercise_Time, y=mean(Mean_Glucose)))+
-         geom_point(color='darkblue', pch=18)+
-        theme_bw()
-
-ggplot(Diabetes1, aes(x=Mean_Walking_Speed, y=mean(Mean_Glucose)))+
-         geom_point(color='darkblue', pch=18)+
-        theme_bw()
-
-ggplot(Diabetes1, aes(x=Temperature, y=mean(Mean_Glucose)))+
-         geom_point(color='darkblue', pch=18)+
-        theme_bw()
-
-ggplot(Diabetes1, aes(x=Precipitation_Total, y=mean(Mean_Glucose)))+
-         geom_point(color='darkblue', pch=18)+
-        theme_bw()
-
-ggplot(Diabetes1, aes(x=Humidity, y=mean(Mean_Glucose)))+
-         geom_point(color='darkblue', pch=18)+
-        theme_bw()
-
-ggplot(Diabetes1, aes(x=Cloud_Cover, y=mean(Mean_Glucose)))+
-         geom_point(color='darkblue', pch=18)+
-        theme_bw()
-
-ggplot(Diabetes1, aes(x=Sunshine_Duration, y=mean(Mean_Glucose)))+
-         geom_point(color='darkblue', pch=18)+
-        theme_bw()
-```
 
 ```{r}
 ggplot(Diabetes1, aes(x=Time, y=Mean_Glucose))+
@@ -518,6 +452,285 @@ ggplot(Diabetes1, aes(x = Sunshine_Duration, y = Mean_Glucose)) +
   theme_bw()
 ```
 
+### Linear Regressions for Glucose
+
+```{r}
+#The following were not significant on their own
+mylm1 <- lm(Mean_Glucose ~ Mean_Active_Energy, data=Diabetes1)
+mylm2 <- lm(Mean_Glucose ~ Mean_Basal_Energy, data=Diabetes1)
+mylm3<- lm(Mean_Glucose ~ Steps, data=Diabetes1)
+mylm4 <- lm(Mean_Glucose ~ Stand_Time, data=Diabetes1)
+mylm5 <- lm(Mean_Glucose ~ Exercise_Time, data=Diabetes1)
+mylm6 <- lm(Mean_Glucose ~ Mean_Walking_Speed, data=Diabetes1)
+mylm7 <- lm(Mean_Glucose ~ Precipitation_Total, data=Diabetes1)
+
+#The following had a significant p-value on their own, but an r-squared of less than .1
+mylm8 <- lm(Mean_Glucose ~ Time, data=Diabetes1)
+mylm8 <- lm(Mean_Glucose ~ Day, data=Diabetes1)
+mylm10 <- lm(Mean_Glucose ~ Mean_Heart_Rate, data=Diabetes1)
+mylm11 <- lm(Mean_Glucose ~ Temperature, data=Diabetes1)
+mylm12 <- lm(Mean_Glucose ~ Humidity, data=Diabetes1)
+mylm13 <- lm(Mean_Glucose ~ Cloud_Cover, data=Diabetes1)
+mylm14 <- lm(Mean_Glucose ~ Sunshine_Duration, data=Diabetes1)
+```
+
+This is the best model that I could get for the Mean Glucose Level. All the significant variables are those that change from day to day which makes sense for Type 1 Diabetes. Because this condition is a genetic issue, it makes sense that no health factors really impact it. If we had data on the food that was eaten, then we may see more significance. Type 2 glucose levels would also have a different impact with the health data as health is an important part in reducing those symptoms.
+
+```{r}
+mylm <- lm(Mean_Glucose ~ Day + Mean_Heart_Rate + Humidity + Cloud_Cover + Humidity:Day + Humidity:Cloud_Cover + Humidity:Mean_Heart_Rate, data=Diabetes1)
+pander(summary(mylm))
+```
 
 
+## Find Relationships With Weather
 
+Because there may not be any significance with Glucose and Health data, I wanted to also look at Health data and the weather data to simply build some general insight for my sister. These were some variables that I thought may be impacted by the weather.
+
+```{r, warning=FALSE}
+ggplot(Diabetes1, aes(y = Mean_Heart_Rate, x = Temperature)) + 
+  geom_point(color="dodgerblue3", pch=18)+
+  labs(title = "Average Heart Rate by Temperature", y="Heart Rate", x="Temperature")+
+  theme_bw()
+```
+
+```{r}
+mylm <- lm(Mean_Heart_Rate ~ Temperature, data=Diabetes1)
+pander(summary(mylm))
+```
+
+
+```{r, warning=FALSE}
+ggplot(Diabetes1, aes(y = Steps, x = Temperature)) + 
+  geom_point(color="dodgerblue3", pch=18)+
+  labs(title = "Daily Steps by Temperature", y="Steps", x="Temperature")+
+  theme_bw()
+```
+
+```{r}
+mylm <- lm(Steps ~ Temperature, data=Diabetes1)
+pander(summary(mylm))
+```
+
+```{r, warning=FALSE}
+ggplot(Diabetes1, aes(y = Exercise_Time, x = Temperature)) + 
+  geom_point(color="dodgerblue3", pch=18)+
+  labs(title = "Stand Time by Temperature", y="Stand Time", x="Temperature")+
+  theme_bw()
+```
+
+```{r}
+mylm <- lm(Exercise_Time ~ Temperature, data=Diabetes1)
+pander(summary(mylm))
+```
+
+## Variables Throughout Time
+
+I wanted to see how all of the variables change throughout time on their own.
+
+#### Heart Rate
+
+```{r, warning=FALSE}
+ggplot(Diabetes1, aes(x=Time, y=Mean_Heart_Rate))+
+  geom_boxplot(fill="dodgerblue3", color='black')+
+  labs(title = "Average Heart Rate Throughout the Day", y="Heart Rate", x="Hour of the Day")+
+  theme_bw()
+```
+
+```{r}
+mylm <- lm(Mean_Heart_Rate ~ Time, data=Diabetes1)
+pander(summary(mylm))
+```
+
+```{r, warning=FALSE}
+ggplot(Diabetes1, aes(x = Day, y = Mean_Heart_Rate)) + 
+  geom_point(fun = "mean", stat="summary", color="dodgerblue3", pch=18)+
+  labs(title = "Average Heart Rate Throughout the Year", y="Heart Rate", x="Date")+
+  theme_bw()
+```
+
+```{r}
+mylm <- lm(Mean_Heart_Rate ~ Day, data=Diabetes1)
+pander(summary(mylm))
+```
+
+#### Active Energy
+
+```{r, warning=FALSE}
+ggplot(Diabetes1, aes(x=Time, y=Mean_Active_Energy))+
+  geom_boxplot(fill="dodgerblue3", color='black')+
+  labs(title = "Average Active Energy Throughout the Day", y="Active Energy", x="Hour of the Day")+
+  theme_bw()
+```
+
+```{r}
+mylm <- lm(Mean_Active_Energy ~ Time, data=Diabetes1)
+pander(summary(mylm))
+```
+
+```{r, warning=FALSE}
+ggplot(Diabetes1, aes(x = Day, y = Mean_Active_Energy)) + 
+  geom_point(fun = "mean", stat="summary", color="dodgerblue3", pch=18)+
+  labs(title = "Average Active Energy Throughout the Year", y="Active Energy", x="Date")+
+  theme_bw()
+```
+
+```{r}
+mylm <- lm(Mean_Active_Energy ~ Day, data=Diabetes1)
+pander(summary(mylm))
+```
+
+#### Basal Energy
+
+```{r, warning=FALSE}
+ggplot(Diabetes1, aes(x=Time, y=Mean_Basal_Energy))+
+  geom_boxplot(fill="dodgerblue3", color='black')+
+  labs(title = "Average Basal Energy Throughout the Day", y="Basal Energy", x="Hour of the Day")+
+  theme_bw()
+```
+
+```{r}
+mylm <- lm(Mean_Basal_Energy ~ Time, data=Diabetes1)
+pander(summary(mylm))
+```
+
+```{r, warning=FALSE}
+ggplot(Diabetes1, aes(x = Day, y = Mean_Basal_Energy)) + 
+  geom_point(fun = "mean", stat="summary", color="dodgerblue3", pch=18)+
+  labs(title = "Average Basal Energy Throughout the Year", y="Basal Energy", x="Date")+
+  theme_bw()
+```
+
+```{r}
+mylm <- lm(Mean_Basal_Energy ~ Day, data=Diabetes1)
+pander(summary(mylm))
+```
+
+#### Steps
+
+```{r, warning=FALSE}
+ggplot(Diabetes1, aes(x=Time, y=Steps))+
+  geom_boxplot(fill="dodgerblue3", color='black')+
+  labs(title = "Steps Throughout the Day", y="Steps", x="Hour of the Day")+
+  theme_bw()
+```
+
+```{r}
+mylm <- lm(Steps ~ Time, data=Diabetes1)
+pander(summary(mylm))
+```
+
+```{r, warning=FALSE}
+ggplot(Diabetes1, aes(x = Day, y = Steps)) + 
+  geom_point(fun = "mean", stat="summary", color="dodgerblue3", pch=18)+
+  labs(title = "Steps Throughout the Year", y="Steps", x="Date")+
+  theme_bw()
+```
+
+```{r}
+mylm <- lm(Steps ~ Day, data=Diabetes1)
+pander(summary(mylm))
+```
+
+#### Stand Time
+
+```{r, warning=FALSE}
+ggplot(Diabetes1, aes(x=Time, y=Stand_Time))+
+  geom_boxplot(fill="dodgerblue3", color='black')+
+  labs(title = "Stand Time Throughout the Day", y="Stand Time", x="Hour of the Day")+
+  theme_bw()
+```
+
+```{r}
+mylm <- lm(Stand_Time ~ Time, data=Diabetes1)
+pander(summary(mylm))
+```
+
+```{r, warning=FALSE}
+ggplot(Diabetes1, aes(x = Day, y = Stand_Time)) + 
+  geom_point(fun = "mean", stat="summary", color="dodgerblue3", pch=18)+
+  labs(title = "Stand Time Throughout the Year", y="Stand Time", x="Date")+
+  theme_bw()
+```
+
+```{r}
+mylm <- lm(Stand_Time ~ Day, data=Diabetes1)
+pander(summary(mylm))
+```
+
+#### Stairs
+
+```{r, warning=FALSE}
+ggplot(Diabetes1, aes(x=Time, y=Stairs))+
+  geom_boxplot(fill="dodgerblue3", color='black')+
+  labs(title = "Stairs Throughout the Day", y="Stairs", x="Hour of the Day")+
+  theme_bw()
+```
+
+```{r}
+mylm <- lm(Stairs ~ Time, data=Diabetes1)
+pander(summary(mylm))
+```
+
+```{r, warning=FALSE}
+ggplot(Diabetes1, aes(x = Day, y = Stairs)) + 
+  geom_point(fun = "mean", stat="summary", color="dodgerblue3", pch=18)+
+  labs(title = "StairsAverage Heart Rate Throughout the Year", y="Stairs", x="Date")+
+  theme_bw()
+```
+
+```{r}
+mylm <- lm(Stairs ~ Day, data=Diabetes1)
+pander(summary(mylm))
+```
+
+#### Exercise Time
+
+```{r, warning=FALSE}
+ggplot(Diabetes1, aes(x=Time, y=Exercise_Time))+
+  geom_boxplot(fill="dodgerblue3", color='black')+
+  labs(title = "Exercise Time Throughout the Day", y="Exercise Time", x="Hour of the Day")+
+  theme_bw()
+```
+
+```{r}
+mylm <- lm(Exercise_Time ~ Time, data=Diabetes1)
+pander(summary(mylm))
+```
+
+```{r, warning=FALSE}
+ggplot(Diabetes1, aes(x = Day, y = Exercise_Time)) + 
+  geom_point(fun = "mean", stat="summary", color="dodgerblue3", pch=18)+
+  labs(title = "Exercise Time Throughout the Year", y="Exercise Time", x="Date")+
+  theme_bw()
+```
+
+```{r}
+mylm <- lm(Exercise_Time ~ Day, data=Diabetes1)
+pander(summary(mylm))
+```
+
+#### Walking Speed
+
+```{r, warning=FALSE}
+ggplot(Diabetes1, aes(x=Time, y=Mean_Walking_Speed))+
+  geom_boxplot(fill="dodgerblue3", color='black')+
+  labs(title = "Average Walking Speed Throughout the Day", y="Walking Speed", x="Hour of the Day")+
+  theme_bw()
+```
+
+```{r}
+mylm <- lm(Mean_Walking_Speed ~ Time, data=Diabetes1)
+pander(summary(mylm))
+```
+
+```{r, warning=FALSE}
+ggplot(Diabetes1, aes(x = Day, y = Mean_Walking_Speed)) + 
+  geom_point(fun = "mean", stat="summary", color="dodgerblue3", pch=18)+
+  labs(title = "Average Walking Speed Throughout the Year", y="Walking Speed", x="Date")+
+  theme_bw()
+```
+
+```{r}
+mylm <- lm(Mean_Walking_Speed ~ Day, data=Diabetes1)
+pander(summary(mylm))
+```
